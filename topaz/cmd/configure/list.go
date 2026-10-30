@@ -1,0 +1,54 @@
+package configure
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/aserto-dev/topaz/topaz/cc"
+	"github.com/aserto-dev/topaz/topaz/table"
+)
+
+type ListConfigCmd struct {
+	ConfigDir string `flag:"" required:"false" default:"${topaz_cfg_dir}" help:"path to config folder" `
+}
+
+func (cmd ListConfigCmd) Run(ctx context.Context) error {
+	cfg, err := cc.RequireConfig()
+	if err != nil {
+		return err
+	}
+
+	tab := table.New(os.Stdout)
+	defer tab.Close()
+
+	tab.Header("", "Name", "Config File")
+
+	files, err := os.ReadDir(cmd.ConfigDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	data := [][]any{}
+
+	for i := range files {
+		name, _, _ := strings.Cut(files[i].Name(), ".")
+		active := ""
+
+		if files[i].Name() == filepath.Base(cfg.Active.ConfigFile) {
+			active = "*"
+		}
+
+		data = append(data, []any{active, name, files[i].Name()})
+	}
+
+	tab.Bulk(data)
+	tab.Render()
+
+	return nil
+}

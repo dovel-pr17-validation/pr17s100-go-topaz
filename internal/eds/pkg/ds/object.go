@@ -1,0 +1,92 @@
+package ds
+
+import (
+	"bytes"
+
+	dsc "github.com/aserto-dev/go-directory/aserto/directory/common/v3"
+	"github.com/aserto-dev/topaz/internal/azm/safe"
+	"github.com/aserto-dev/topaz/internal/eds/pkg/x"
+	"google.golang.org/protobuf/types/known/structpb"
+)
+
+type object struct {
+	*safe.SafeObject
+}
+
+func Object(i *dsc.Object) *object { return &object{safe.Object(i)} }
+
+func (i *object) StrKey() string {
+	return i.GetType() + string(TypeIDSeparator) + i.GetId()
+}
+
+func (i *object) Key() []byte {
+	var buf bytes.Buffer
+
+	buf.Grow(x.MaxObjectIdentifierSize)
+
+	buf.WriteString(i.GetType())
+	buf.WriteByte(TypeIDSeparator)
+	buf.WriteString(i.GetId())
+
+	return buf.Bytes()
+}
+
+type objectIdentifier struct {
+	*safe.SafeObjectIdentifier
+}
+
+func ObjectIdentifier(i *dsc.ObjectIdentifier) *objectIdentifier {
+	return &objectIdentifier{safe.ObjectIdentifier(i)}
+}
+
+func (i *objectIdentifier) StrKey() string {
+	return i.GetObjectType() + string(TypeIDSeparator) + i.GetObjectId()
+}
+
+func (i *objectIdentifier) Key() []byte {
+	var buf bytes.Buffer
+
+	buf.Grow(x.MaxObjectIdentifierSize)
+
+	buf.WriteString(i.GetObjectType())
+	buf.WriteByte(TypeIDSeparator)
+
+	if i.GetObjectId() != "" {
+		buf.WriteString(i.GetObjectId())
+	}
+
+	return buf.Bytes()
+}
+
+func ObjectSelector(i *dsc.ObjectIdentifier) *safe.SafeObjectSelector {
+	return safe.ObjectSelector(i)
+}
+
+const (
+	propDisplayName string = "display_name"
+)
+
+// PatchObjectRead: transfers Objects.Properties["display_name"] to Object.DisplayName (BACKWARD COMPATIBILITY).
+func PatchObjectRead(i *dsc.Object) *dsc.Object {
+	fields := i.GetProperties().GetFields()
+
+	if displayName, ok := fields[propDisplayName]; ok {
+		i.DisplayName = displayName.GetStringValue() //nolint:staticcheck // Marked as deprecated
+	}
+
+	return i
+}
+
+// PatchObjectWrite: transfers Object.DisplayName to Objects.Properties["display_name"] (FORWARD COMPATIBILITY).
+func PatchObjectWrite(i *dsc.Object) *dsc.Object {
+	if displayName := i.GetDisplayName(); len(displayName) > 0 { //nolint:staticcheck // Marked as deprecated
+		if i.GetProperties().Fields == nil {
+			i.Properties.Fields = map[string]*structpb.Value{}
+		}
+
+		i.Properties.Fields[propDisplayName] = structpb.NewStringValue(displayName)
+		i.DisplayName = "" //nolint:staticcheck // Marked as deprecated
+	}
+
+	return i
+}
